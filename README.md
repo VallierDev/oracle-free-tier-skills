@@ -136,3 +136,14 @@ MIT
 `amount: 1` 表示账号账单币种的 1 元。`billing_currency` 是用户核对记录，API 直接按账号 rate card 币种设置，不提供币种转换。支持正整数金额。已有同名同配置会复用；发现其他根区间预算会停止，按提示指定既有 budget_name，不覆盖现有预算。为两个账号分别保留本地配置，切勿并发操作同一账号。重复运行前先核对结果不明的写入。
 
 需要根区间预算管理 IAM 权限。告警约每 24 小时评估一次，属于消费提醒，不会自动停机或限制消费。SDK 自动重试已关闭，写入使用稳定重试令牌并回读验证。本入口已通过模拟测试及两个账号的真实只读预算列表查询；未新建真实预算或验证邮件投递。官方说明见 [Oracle Budgets](https://docs.oracle.com/en-us/iaas/Content/Billing/Concepts/budgetsoverview.htm)。
+
+
+## 流量与当月费用一起查询
+
+```bash
+.venv/bin/python scripts/traffic.py --accounts accounts.local.json --with-cost
+# 历史月份、JSON 输出也可组合
+.venv/bin/python scripts/traffic.py --accounts accounts.local.json --with-cost --month 2026-10 --json
+```
+
+逐账号报告公网出站 TB、是否达到 8 TB，以及当月全账号已记录费用和币种。不同币种分别列出，不自动汇率换算。金额来自 COST 查询，并非仅流量费用；不是最终发票、税费或信用卡扣款承诺。Oracle 数据可能滞后，空数据和接口失败标为未知，不按 0 报告。流量与费用独立查询，一项失败仍保留另一项结果。此功能只查询，不自动建立定时推送。

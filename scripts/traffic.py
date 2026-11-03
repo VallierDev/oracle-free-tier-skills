@@ -29,12 +29,27 @@ def summarize(rows):
     return total
 
 
-def read_account(account, start, end, config_file):
+def summarize_cost(rows):
+    if not rows:
+        raise ValueError("no cost rows; billing coverage is unknown")
+    totals = {}
+    for row in rows:
+        if row.is_forecast is True or row.computed_amount is None or not row.currency:
+            raise ValueError("cost amount, currency or forecast flag is invalid")
+        amount = Decimal(str(row.computed_amount))
+        if not amount.is_finite():
+            raise ValueError("cost amount must be finite")
+        # Negative credits/adjustments remain part of the reported net cost.
+        totals[row.currency] = totals.get(row.currency, Decimal(0)) + amount
+    return {currency: str(amount) for currency, amount in sorted(totals.items())}
+
+
+def read_account(account, start, end, config_file, query_type="USAGE"):
     cfg = oci.config.from_file(config_file, account["profile"])
     query = oci.usage_api.models.RequestSummarizedUsagesDetails(
         tenant_id=cfg["tenancy"], time_usage_started=start.isoformat() + "T00:00:00Z",
         time_usage_ended=end.isoformat() + "T00:00:00Z", granularity="MONTHLY",
-        query_type="USAGE", group_by=["skuPartNumber", "skuName", "unit"],
+        query_type=query_type, group_by=(["currency"] if query_type == "COST" else ["skuPartNumber", "skuName", "unit"]),
     )
     for suffix in ("oci.oraclecloud.com", "oraclecloud.com"):
         api = oci.usage_api.UsageapiClient(
@@ -49,7 +64,7 @@ def read_account(account, start, end, config_file):
                 rows.extend(response.data.items)
                 page = response.headers.get("opc-next-page")
                 if not page:
-                    return summarize(rows)
+                    return summarize_cost(rows) if query_type == "COST" else summarize(rows)
                 if page in seen:
                     raise ValueError("repeated pagination cursor")
                 seen.add(page)
@@ -64,6 +79,7 @@ def main():
     parser.add_argument("--oci-config", default="~/.oci/config")
     parser.add_argument("--month", help="UTC month YYYY-MM, default current month")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--with-cost", action="store_true", help="include recorded monthly cost and account currency")
     args = parser.parse_args()
     today = datetime.now(timezone.utc).date()
     try:
@@ -86,10 +102,19 @@ def main():
             row.update(error=exc.code, http_status=exc.status)
         except Exception as exc:
             row.update(error=type(exc).__name__)
+        if args.with_cost:
+            row["cost_status"] = "unknown"
+            try:
+                row["cost_by_currency"] = read_account(account, start, end, args.oci_config, "COST")
+                row["cost_status"] = "ok"
+            except oci.exceptions.ServiceError as exc:
+                row["cost_error"] = exc.code
+            except Exception as exc:
+                row["cost_error"] = type(exc).__name__
         results.append(row)
     report = {"month_utc": start.strftime("%Y-%m"),
               "queried_at": datetime.now(timezone.utc).isoformat(),
-              "usage_note": "Oracle billing usage may lag up to 24 hours.", "accounts": results}
+              "usage_note": "Oracle billing usage may lag up to 24 hours. Recorded cost is not a final invoice or card charge.", "accounts": results}
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
@@ -100,8 +125,14 @@ def main():
                 print(f"{row['label']} {Decimal(row['tb']):.3f} TB（{Decimal(row['gb']):.2f} GB{marker}）")
             else:
                 print(f"{row['label']} 查询未知（{row['error']}）")
+            if args.with_cost:
+                if row["cost_status"] == "ok":
+                    cost = " / ".join(f"{Decimal(value):.2f} {currency}" for currency, value in row["cost_by_currency"].items())
+                    print(f"  当月已记录费用：{cost}（非最终账单或扣款金额）")
+                else:
+                    print(f"  当月费用未知（{row['cost_error']}）")
         print(f"查询时间 {report['queried_at']}，Oracle 用量可能延迟最多 24 小时。")
-    return 0 if all(row["status"] == "ok" for row in results) else 2
+    return 0 if all(row["status"] == "ok" and (not args.with_cost or row["cost_status"] == "ok") for row in results) else 2
 
 
 if __name__ == "__main__":

@@ -15,6 +15,14 @@ description: Query Oracle Cloud E2 Micro or ARM A1 2C12G/4C24G capacity, run a s
 .venv/bin/python scripts/traffic.py --accounts accounts.local.json
 ```
 
+需要同时报告账单时加 --with-cost：
+
+```bash
+.venv/bin/python scripts/traffic.py --accounts accounts.local.json --with-cost
+```
+
+该入口一起返回当月公网出站流量及全账号已记录消费，含各自账单币种；费用查询不按出站 SKU 过滤，也不把不同币种相加。费用包含账单已记录的调整，可能滞后，不代表最终发票、税费或信用卡扣款。费用查询失败时保留流量结果，费用报未知，不能当作 0。不因查询功能自动配置任何定时推送。
+
 历史月份加 --month YYYY-MM，机器可读输出加 --json。读取的是 UTC 计费月公网出站用量，1 TB 按 1000 GB 换算。报告未知值及错误，保留查询时间和数据延迟说明。
 
 用户要求日报时，将命令交给其已有调度器，先核对同一任务是否已配置。用户要求 8 TB 提醒时，根据 reached_8tb 按 profile 和计费月去重。每日汇报与阈值告警按用户选择区分。脚本输出报告，调度器负责发送。
