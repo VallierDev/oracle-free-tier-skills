@@ -1,0 +1,8 @@
+{
+  "profile": "DEFAULT",
+  "budget_name": "free-tier-monthly-alert",
+  "amount": 1,
+  "billing_currency": "USD",
+  "currency_confirmed": false,
+  "recipients": ["you@example.com"]
+}

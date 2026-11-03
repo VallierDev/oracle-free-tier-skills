@@ -11,3 +11,5 @@ launch.json
 finished.json
 latest.json
 *.log
+budget.local.json
+budget.*.local.json

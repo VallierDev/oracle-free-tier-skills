@@ -97,7 +97,7 @@ worker 可用 Ctrl+C 或 SIGTERM 停止。它会等待正在执行的单次调�
 - 新建资源前核对 Always Free 资格、主区域和账号累计用量。启动盘、保留的旧盘和数据盘需要合并计数。
 - 需要创建门禁时，可针对区间设置资源配额。配额约束与免费计费资格应分别核对，避免把单个可用性域的配额误当成账号全局额度。
 
-预算告警、资源配额和自动断网需要另行配置。本技能提供查询、创建预检及提醒信号。PAYG 允许继续使用免费权益，但不构成零费用、可用容量或永不回收保证。
+本技能支持配置预算邮件告警；资源配额和自动断网需要另行配置。PAYG 允许继续使用免费权益，但不构成零费用、可用容量或永不回收保证。
 
 ## 测试
 
@@ -120,3 +120,19 @@ worker 可用 Ctrl+C 或 SIGTERM 停止。它会等待正在执行的单次调�
 ## License
 
 MIT
+
+
+## 根区间月预算邮件告警
+
+可对每个账号设置小额月预算，覆盖根区间和子区间；实际消费达到预算 100% 时发送邮件。复制 `budget.example.json` 为 `budget.local.json`，填写 profile、邮箱、金额及真实账单币种，核实后将 `currency_confirmed` 改为 `true`。
+
+```bash
+# 只读预览
+.venv/bin/python scripts/budget.py --settings budget.local.json
+# 创建缺少的预算或规则并回读验证
+.venv/bin/python scripts/budget.py --settings budget.local.json --apply
+```
+
+`amount: 1` 表示账号账单币种的 1 元。`billing_currency` 是用户核对记录，API 直接按账号 rate card 币种设置，不提供币种转换。支持正整数金额。已有同名同配置会复用；发现其他根区间预算会停止，按提示指定既有 budget_name，不覆盖现有预算。为两个账号分别保留本地配置，切勿并发操作同一账号。重复运行前先核对结果不明的写入。
+
+需要根区间预算管理 IAM 权限。告警约每 24 小时评估一次，属于消费提醒，不会自动停机或限制消费。SDK 自动重试已关闭，写入使用稳定重试令牌并回读验证。本入口已通过模拟测试及两个账号的真实只读预算列表查询；未新建真实预算或验证邮件投递。官方说明见 [Oracle Budgets](https://docs.oracle.com/en-us/iaas/Content/Billing/Concepts/budgetsoverview.htm)。

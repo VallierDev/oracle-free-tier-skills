@@ -1,6 +1,6 @@
 ---
 name: oracle-free-tier-skills
-description: Query Oracle Cloud E2 Micro or ARM A1 2C12G/4C24G capacity, run a single-instance grabber with quota checks, and report monthly public outbound traffic. Use for OCI 免费抢机、ARM 抢机、容量查询、流量日报或 8 TB 预警。
+description: Query Oracle Cloud E2 Micro or ARM A1 2C12G/4C24G capacity, run a single-instance grabber with quota checks, report monthly public outbound traffic, and configure root monthly budget email alerts. Use for OCI 免费抢机、ARM 抢机、容量查询、流量日报、8 TB 预警或月预算告警。
 ---
 
 # Oracle Free Tier Skills
@@ -40,4 +40,17 @@ E2 Micro 上限检查为两台。A1 检查目标和现有 A1 的 OCPU/内存总�
 
 新增盘固定 50 GB、10 VPU，主区域启动盘与数据盘累计不超过 200 GB。镜像选择官方 Ubuntu 24.04，与 E2 的 x86 或 A1 的 aarch64 架构匹配。实际费用还须结合账号合约、平台标记及其他服务用量核对。
 
-预算创建和断网操作需其他工具。PAYG 不构成永不回收的承诺。参见 README.md 的官方来源。
+自动断网需其他工具。PAYG 不构成永不回收的承诺。参见 README.md 的官方来源。
+
+## 根区间小额月预算告警
+
+将 budget.example.json 复制为 budget.local.json，填写目标 profile、收件邮箱和金额。先核对账号账单币种，再设置 billing_currency 和 currency_confirmed=true；金额 1 是该账号账单币种的 1 元，脚本不能转换币种。每个账号分别配置和执行。
+
+```bash
+.venv/bin/python scripts/budget.py --settings budget.local.json
+.venv/bin/python scripts/budget.py --settings budget.local.json --apply
+```
+
+默认只读预览。用户要求设置预算后才用 --apply 创建。范围为根区间及子区间，按自然月重复，实际消费达到 100% 时向配置邮箱告警。先列出现有预算和规则，匹配则复用；存在其他根区间预算时提示用户选择既有名称，不另建重复预算，不覆盖或删除既有设置。未知写入结果停止，先回读控制台，禁止并发配置同一账号。
+
+预算 API 在账号主区域操作，需要根区间预算管理权限。告警约每 24 小时评估，不能自动停机、断网或封顶消费，也不能保证零扣费。已有消费已达阈值时可能触发邮件。此入口支持任意 OCI profile，不包含账号凭据。
