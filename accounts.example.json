@@ -1,0 +1,6 @@
+{
+  "accounts": [
+    {"label": "Account A", "profile": "DEFAULT"},
+    {"label": "Account B", "profile": "SECOND"}
+  ]
+}

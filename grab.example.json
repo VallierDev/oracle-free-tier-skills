@@ -1,0 +1,10 @@
+{
+  "profile": "DEFAULT",
+  "expected_tenancy": "YOUR_TENANCY_OCID",
+  "region": "YOUR_HOME_REGION",
+  "availability_domain": "YOUR_FULL_AD_NAME",
+  "subnet_id": "YOUR_PUBLIC_SUBNET_OCID",
+  "ssh_public_key": "~/.ssh/id_ed25519.pub",
+  "instance_name": "oci-e2-once",
+  "state_dir": "~/.local/state/oci-e2-once"
+}

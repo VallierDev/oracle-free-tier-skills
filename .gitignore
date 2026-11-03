@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.oci/
+.env*
+*.pem
+*.key
+grab.local.json
+accounts.local.json
+launch.json
+finished.json
+latest.json
+*.log
