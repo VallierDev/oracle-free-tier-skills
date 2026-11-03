@@ -1,0 +1,15 @@
+{
+  "profile": "DEFAULT",
+  "expected_tenancy": "YOUR_TENANCY_OCID",
+  "region": "YOUR_HOME_REGION",
+  "availability_domain": "YOUR_FULL_AD_NAME",
+  "subnet_id": "YOUR_PUBLIC_SUBNET_OCID",
+  "ssh_public_key": "~/.ssh/id_ed25519.pub",
+  "instance_name": "oci-a1-2c12g-once",
+  "state_dir": "~/.local/state/oci-a1-2c12g-once",
+  "target": "a1-2c12g",
+  "a1_free_allowance": {
+    "ocpu_hours": 1500,
+    "memory_gb_hours": 9000
+  }
+}

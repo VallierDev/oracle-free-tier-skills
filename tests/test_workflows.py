@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 import json
 from pathlib import Path
@@ -93,6 +93,79 @@ class GrabTests(unittest.TestCase):
 
     def test_wrong_home_region_blocks(self):
         self.api.list_region_subscriptions.return_value.data[0].is_home_region = False
+        with self.assertRaises(ValueError):
+            grab.run(False)
+        self.api.launch_instance.assert_not_called()
+
+    def enable_arm(self, target="a1-2c12g", legacy=False):
+        self.settings["target"] = target
+        if legacy:
+            self.settings["a1_free_allowance"] = {
+                "ocpu_hours": 3000, "memory_gb_hours": 18000, "verified_from_account": True}
+        self.config.write_text(json.dumps(self.settings))
+        grab.configure(self.config)
+        self.api.create_compute_capacity_report.return_value.data.shape_availabilities[0].instance_shape = grab.SHAPE
+        self.api.list_images.return_value.data[0].display_name = "Canonical-Ubuntu-24.04-aarch64-test"
+        patcher = patch.object(grab, "a1_usage", return_value=(Decimal(0), Decimal(0)))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        clock = patch.object(grab, "datetime")
+        clock.start().now.return_value = datetime(2026, 11, 3, tzinfo=timezone.utc)
+        self.addCleanup(clock.stop)
+
+    def test_arm_2c12g_report_and_launch(self):
+        self.enable_arm()
+        self.assertEqual(grab.run(False)["status"], "submitted")
+        details = self.api.launch_instance.call_args.args[0]
+        report = self.api.create_compute_capacity_report.call_args.args[0]
+        self.assertEqual(details.shape, "VM.Standard.A1.Flex")
+        self.assertEqual(details.shape_config.ocpus, 2)
+        self.assertEqual(details.shape_config.memory_in_gbs, 12)
+        self.assertEqual(report.shape_availabilities[0].instance_shape_config.ocpus, 2)
+        self.assertIn("aarch64", self.api.list_images.return_value.data[0].display_name)
+
+    def test_arm_4c24g_verified_legacy(self):
+        self.enable_arm("a1-4c24g", legacy=True)
+        self.assertEqual(grab.run(False)["status"], "submitted")
+        details = self.api.launch_instance.call_args.args[0]
+        self.assertEqual(details.shape_config.ocpus, 4)
+        self.assertEqual(details.shape_config.memory_in_gbs, 24)
+
+    def test_arm_4c24g_default_allowance_blocks(self):
+        self.enable_arm("a1-4c24g")
+        self.assertEqual(grab.run(False)["reason"], "a1_fleet_exceeds_allowance")
+        self.api.launch_instance.assert_not_called()
+
+    def test_arm_legacy_requires_account_verification(self):
+        self.enable_arm("a1-4c24g", legacy=True)
+        grab.CONFIG["a1_free_allowance"]["verified_from_account"] = False
+        self.assertEqual(grab.run(False)["reason"], "verify_legacy_a1_allowance")
+        self.api.launch_instance.assert_not_called()
+
+    def test_arm_existing_fleet_counts(self):
+        self.enable_arm()
+        self.api.list_instances.return_value.data.append(S(
+            display_name="existing-arm", shape="VM.Standard.A1.Flex", lifecycle_state="RUNNING",
+            shape_config=S(ocpus=1, memory_in_gbs=6)))
+        self.assertEqual(grab.run(False)["reason"], "a1_fleet_exceeds_allowance")
+        self.api.launch_instance.assert_not_called()
+
+    def test_arm_prior_month_usage_blocks(self):
+        self.enable_arm()
+        with patch.object(grab, "a1_usage", return_value=(Decimal(1500), Decimal(9000))):
+            self.assertEqual(grab.run(False)["reason"], "a1_current_month_usage_near_limit")
+        self.api.launch_instance.assert_not_called()
+
+    def test_arm_rejects_x86_image(self):
+        self.enable_arm()
+        self.api.list_images.return_value.data[0].display_name = "Canonical-Ubuntu-24.04-x86-test"
+        with self.assertRaises(ValueError):
+            grab.run(False)
+        self.api.launch_instance.assert_not_called()
+
+    def test_change_specification_invalidates_state(self):
+        grab.run(True, True)
+        self.enable_arm()
         with self.assertRaises(ValueError):
             grab.run(False)
         self.api.launch_instance.assert_not_called()

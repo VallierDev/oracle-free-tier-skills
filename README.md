@@ -1,6 +1,6 @@
 # Oracle Free Tier Skills
 
-把 Oracle Cloud 免费 E2 Micro 容量查询、单实例抢机和多账号出站流量日报交给 AI agent。
+把 Oracle Cloud E2 Micro、ARM A1 容量查询、单实例抢机和多账号出站流量日报交给 AI agent。
 
 项目由日常管理两个 OCI 账号的脚本整理而来。面向能执行 Python 的 Codex、Claude Code、Dot 等 agent，技能入口是 [SKILL.md](SKILL.md)。
 
@@ -8,13 +8,13 @@
 
 | 功能 | 行为 | 验证 |
 | --- | --- | --- |
-| 免费 E2 Micro 预检 | 核对主区域、已有实例数、启动盘和数据盘总量、公网子网及平台镜像 | 真实账号只读预检通过 |
-| 容量查询 | 调用 OCI Compute Capacity Report | 真实接口返回过 OUT_OF_HOST_CAPACITY |
+| 免费资源预检 | 核对主区域、实例数、A1 月度权益与既有用量、磁盘总量、公网子网及平台镜像 | 真实 E2 只读预检通过，A1 门禁已做模拟测试 |
+| 容量查询 | 调用 OCI Compute Capacity Report，A1 报告含 OCPU 与内存规格 | E2 真实接口返回过 OUT_OF_HOST_CAPACITY，A1 2C12G/4C24G 只读报告返回过 AVAILABLE |
 | 单实例抢机 | 容量可用才提交，固定 50 GB、10 VPU，保存提交意图并回查 | 模拟测试覆盖防重和未知结果，真实成功创建分支仍待库存验证 |
 | 多账号流量日报 | 查询 UTC 计费月公网出站用量，支持 JSON 和 8 TB 标记 | 两个账号历史月数据与官方用量表核对一致 |
 | 通知和定时运行 | worker 默认每 15 分钟检查。日报由用户已有调度器发送 | 通知发送由 agent 或外部调度器完成 |
 
-目前抢机支持 **VM.Standard.E2.1.Micro**。ARM A1 的配额随账号与政策变化，本版没有实现 A1 自动创建。Linux 和 macOS 可运行抢机模块，其他平台需提供 fcntl 文件锁兼容层。
+抢机支持 **VM.Standard.E2.1.Micro**，以及 **VM.Standard.A1.Flex 的 2C12G、4C24G**。ARM A1 免费权益随账号与政策变化，4C24G 配置需要先核对自己的账号权益。Linux 和 macOS 可运行抢机模块，其他平台需提供 fcntl 文件锁兼容层。
 
 ## 安装与凭据
 
@@ -55,7 +55,15 @@ cp accounts.example.json accounts.local.json
 
 > 每天早上 9 点执行此技能的 traffic.py，按账号报当月累计公网出站 TB 和 GB。数据未知时说明原因。达到 8 TB 时标注提醒，并按 profile 和 UTC 计费月去重。先核对已有排程，再创建日报任务。
 
-## 免费 E2 Micro 抢机
+## E2 Micro / ARM A1 抢机
+
+选择一个配置模板。
+
+| 模板 | target | 规格 |
+| --- | --- | --- |
+| grab.example.json | e2-micro（默认） | E2 Micro |
+| grab.a1-2c12g.example.json | a1-2c12g | ARM A1 2 OCPU / 12 GB |
+| grab.a1-4c24g.example.json | a1-4c24g | ARM A1 4 OCPU / 24 GB |
 
 ```bash
 cp grab.example.json grab.local.json
@@ -64,13 +72,19 @@ cp grab.example.json grab.local.json
 .venv/bin/python scripts/grab.py --settings grab.local.json
 ```
 
+要选 ARM，只替换上面 cp 的源文件，例如 `cp grab.a1-2c12g.example.json grab.local.json`，后续命令相同。每次选择一个规格，同账号只运行一个创建调度器。
+
+当前官方文档列出的 A1 免费额度为每月 1500 OCPU 小时 / 9000 GB 小时，本项目以此为默认值。4C24G 模板使用 3000/18000，但 verified_from_account 默认 false，必须由使用者先确认账号确有该权益，再改为 true。配置声明不能代替 Oracle 的实际计费权益。
+
+A1 提交前核对现有 A1 的 OCPU 和内存总量，以 744 小时按最长月份保守折算，同时查询当月累计 A1 用量（包含已删除实例），估算当前机群至月末的用量并留出 24 小时计量延迟余量。未知用量或单位会阻止提交。月初可能因保守余量暂时阻止创建，超过 24 小时的计量延迟和外部并发变化仍需人工核查。
+
 预检和容量查询不创建实例。有库存后自动创建一台的运行方式如下，执行前确认用户已授权且同账号没有其他抢机调度器。
 
 ```bash
 .venv/bin/python scripts/worker.py --settings grab.local.json --interval 900
 ```
 
-固定检查包含主区域、E2 Micro 少于两台，以及新增 50 GB 后启动盘和数据盘合计不超过 200 GB。只选官方 Ubuntu 24.04 x86 平台镜像和根区间的公网子网。该检查覆盖指定账号主区域内能完整枚举的区间，不是对全账号所有收费服务的费用保证。账号的免费权益和合约应先在控制台确认。
+固定检查包含主区域、E2 Micro 少于两台（E2 模式）、A1 的累计权益（ARM 模式），以及新增 50 GB 后启动盘和数据盘合计不超过 200 GB。只选官方 Ubuntu 24.04 平台镜像，E2 使用 x86、A1 使用 aarch64，并检查根区间公网子网。该检查覆盖指定账号主区域内能完整枚举的区间，不是对全账号所有收费服务的费用保证。账号的免费权益和合约应先在控制台确认。
 
 `state_dir/launch.json` 在外部提交前写入 token。若网络超时或收到未明确失败的结果，后续回查同一创建意图，禁止另发创建请求。实例 RUNNING 后 worker 结束，已提交实例若失败或被终止，则结束并留待人工检查。提交前的配额和资源检查仍存在外部并发变化窗口，请保持同账号只有一个创建调度器。
 
@@ -91,7 +105,7 @@ worker 可用 Ctrl+C 或 SIGTERM 停止。它会等待正在执行的单次调�
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-测试不创建云资源。包括流量单位与分页、免费容量门禁、预检无写入云端、单次提交、已知实例回查及未知结果防重。
+测试不创建云资源。包括流量单位与分页、免费容量门禁、预检无写入云端、单次提交、已知实例回查及未知结果防重，以及 ARM 规格、架构选择、现有机群与当月用量检查。
 
 ## 来源
 

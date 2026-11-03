@@ -1,6 +1,6 @@
 ---
 name: oracle-free-tier-skills
-description: Query Oracle Cloud E2 Micro capacity, run a single-instance grabber with quota checks, and report monthly public outbound traffic for configured OCI accounts. Use for OCI 免费 E2 抢机、容量查询、流量日报或 8 TB 预警。
+description: Query Oracle Cloud E2 Micro or ARM A1 2C12G/4C24G capacity, run a single-instance grabber with quota checks, and report monthly public outbound traffic. Use for OCI 免费抢机、ARM 抢机、容量查询、流量日报或 8 TB 预警。
 ---
 
 # Oracle Free Tier Skills
@@ -19,9 +19,9 @@ description: Query Oracle Cloud E2 Micro capacity, run a single-instance grabber
 
 用户要求日报时，将命令交给其已有调度器，先核对同一任务是否已配置。用户要求 8 TB 提醒时，根据 reached_8tb 按 profile 和计费月去重。每日汇报与阈值告警按用户选择区分。脚本输出报告，调度器负责发送。
 
-## E2 Micro 抢机
+## E2 Micro / ARM A1 抢机
 
-复制 grab.example.json 到本地 grab.local.json，填写目标账号、主区域、完整 AD、根区间公网子网和 SSH 公钥路径。状态目录只用于这次单实例任务。
+按规格选择一个配置模板复制到本地 grab.local.json，填写目标账号、主区域、完整 AD、根区间公网子网和 SSH 公钥路径。E2 用 grab.example.json，ARM 2C12G 用 grab.a1-2c12g.example.json，ARM 4C24G 用 grab.a1-4c24g.example.json。只启动一个创建任务。状态目录绑定账号和规格。
 
 ```bash
 .venv/bin/python scripts/grab.py --settings grab.local.json --preflight
@@ -36,6 +36,8 @@ description: Query Oracle Cloud E2 Micro capacity, run a single-instance grabber
 
 确认已有调度器未同时运行。沿用唯一 worker、同一账号和状态目录。提交结果不明时保留 launch.json 并回查原实例，禁止清空凭证再提交。worker 在实例 RUNNING、额度阻碍、未知提交结果或连续三次错误时结束。
 
-E2 Micro 上限检查为两台，新增盘固定 50 GB、10 VPU，主区域启动盘与数据盘累计不超过 200 GB。镜像使用官方 Ubuntu 24.04 x86 平台镜像。实际费用还须结合账号合约、平台标记及其他服务用量核对。
+E2 Micro 上限检查为两台。A1 检查目标和现有 A1 的 OCPU/内存总量，并从计费 API 查询当月已使用的 OCPU 小时和 GB 小时，预留 24 小时的计量延迟余量。默认权益为 1500/9000。4C24G 需要账号确有 3000/18000 权益，并由用户核对后设置 verified_from_account=true。缺失或无法验证用量时停止。
 
-本版支持 E2 Micro。ARM A1、预算创建和断网操作需其他工具。PAYG 不构成永不回收的承诺。参见 README.md 的官方来源。
+新增盘固定 50 GB、10 VPU，主区域启动盘与数据盘累计不超过 200 GB。镜像选择官方 Ubuntu 24.04，与 E2 的 x86 或 A1 的 aarch64 架构匹配。实际费用还须结合账号合约、平台标记及其他服务用量核对。
+
+预算创建和断网操作需其他工具。PAYG 不构成永不回收的承诺。参见 README.md 的官方来源。
